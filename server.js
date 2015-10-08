@@ -100,14 +100,31 @@ app.post('/hook', function(request, response) {
     console.log('TRSID: ', db['Alice']);
     channelSid = request.body.ChannelSid;
     console.log('channelSid', channelSid);
+    console.log('request.body', request.body);
 
-    // Make Reservation
+    createTask(channelSid);
   }
 
   response.sendStatus(200);
 
   addToChannel(channelSid);
 });
+
+function createTask(channelSid) {
+  console.log('Creating TAsk');
+  client.workspace.tasks.create({
+        workflowSid: workflowSid,
+        attributes: '{"service_request":"support"}'
+    }, function(err, task) {
+      if (err) {
+        response.sendStatus(500).json(err);
+      } else {
+        console.log("task_sid: ", task.sid);
+        console.log("assignment_status: ", task.assignment_status);
+        response.sendStatus(200);
+      }
+    });
+}
 
 function addToChannel(channelSid) {
   console.log('adding to channel: ', channelSid)
@@ -130,16 +147,6 @@ function addToChannel(channelSid) {
 // TaskRouter Callback URLs
 app.all('/assignment_callback', function(request, response) {
   console.log('we got a body: ', request.body);
-  /*
-  // log request body
-  var bodyStr = '';
-  request.on("data",function(chunk){
-      bodyStr += chunk.toString();
-  });
-  request.on("end",function(){
-      console.log(bodyStr.split('&'));
-  });
-  */
 
   // Respond to assignment callbacks with empty 200 response
   response.sendStatus(200);
