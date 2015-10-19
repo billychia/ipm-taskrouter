@@ -4,20 +4,10 @@ var currentChannel; // handle for the current Twilio.IPMessaging.Channel
 var channelCache = {} // Local cache of processed messages for each channel
 var worker; // handle for Twilio.TaskRouter.Worker instance
 
-// TODO remove this stuff
-var identity; // the current user's unique ID, like an e-mail or username
-var channels = {}; // currently connected channels
-var activities = {}; // Local cache of activities and SIDs
-
-
 // helpers to update chat area with messages
-function append(html, clear) { // TODO remove clear logic
+function append(html) { 
     var $messages = $('#messages');
-    if (clear) {
-        $messages.html(html);
-    } else {
-        $messages.append(html);
-    }
+    $messages.append(html);
     $messages.animate({
         scrollTop: $messages[0].scrollHeight
     }, 200);
@@ -40,16 +30,6 @@ function chat(sid, user, msg) {
     if (sid === currentChannel.sid) { append(m); } // add to active box
     channelCache[sid] += m; // add to cache
 }
-
-// Make a given channel the currently selected channel TODO // remove
-/*
-function makeCurrent(channel) {
-    currentChannel = channel;
-    $('select').val(channel.sid);
-    $('#messages').html(channelCache[channel.sid])
-    $("#messages").scrollTop($("#messages")[0].scrollHeight);
-}
-*/
 
 // Make a given channel the currently selected channel
 function makeCurrent(channel) {
@@ -74,15 +54,12 @@ function configureClient(messagingClient) {
     messagingClient.on('channelJoined', function(channel) {
         console.log('channelJoined', channel);
         configureChannel(channel);
-        makeCurrent(channel); // TODO do I need to make current?
+        makeCurrent(channel);
     });
 }
 
 // Configure UI and event callbacks for a channel
 function configureChannel(channel) {
-    // Add to master list of channels
-    channels[channel.sid] = channel; // TODO remove this - do I need it?
-
     // Add channel to sidebar
     var div = '<div id="' + channel.sid + '" class="channel">'
     + channel.friendlyName + '</div>';
@@ -140,7 +117,6 @@ function configureWorker(worker) {
             } else {
                 var data = activityList.data;
                 for(i=0; i<data.length; i++) {
-                    activities[data[i].friendlyName] = data[i].sid; // TODO remove
                     var option = '<option value="' + data[i].sid + '">'
                     + data[i].friendlyName + '</option>';
                     $('#activity').append(option);
@@ -176,7 +152,7 @@ $(function() {
     // Prompt for identity of the current user - not checked for uniqueness
     // in this demo. IRL you would probably use a logged in user's username
     // or e-mail address.
-    identity = prompt('Please enter a username:', 'Bob').trim();
+    var identity = prompt('Please enter a username:', 'Bob').trim();
 
     // After identity entered, fetch capability token from server
     $.getJSON('/token', {

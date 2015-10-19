@@ -97,19 +97,6 @@ app.get('/trtoken', function(request, response) {
         }
     });
 
-    //console.log("taskRouterCache", taskRouterCache);
-
-    // Get the workerSid - kinda hacky, probably a local cache is better idea
-    // client.workspace.workers.get({ "FriendlyName" : identity},
-    //     function(err, data) {
-    //         if(!err) {
-    //             data.workers.forEach(function(worker) {
-    //                 sendToken(worker.sid);
-    //             })
-    //         }
-    //     }
-    // );
-
     // send token after we recieve workerSid
     function sendToken(workerSid) {
         // Generate a TaskRouter Capability Token
@@ -198,7 +185,7 @@ app.all('/assignment_callback', function(request, response) {
   addToChannel(identity, channelSid);
 
   // Respond to assignment callbacks with empty 200 response
-  response.sendStatus(200)//.json('{"instruction": "accept"})');
+  response.sendStatus(200)
 });
 
 // Events callback on workSpace - I don't think this is the way to do it.
