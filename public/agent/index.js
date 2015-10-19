@@ -1,14 +1,17 @@
 // Global references to key objects
 var messagingClient; // handle for Twilio.IPMessaging.Client instance
 var currentChannel; // handle for the current Twilio.IPMessaging.Channel
-var channels = {}; // currently connected channels
-var identity; // the current user's unique ID, like an e-mail or username
-var channelCache = {} // Local cache of messages for each channel
+var channelCache = {} // Local cache of processed messages for each channel
 var worker; // handle for Twilio.TaskRouter.Worker instance
+
+// TODO remove this stuff
+var identity; // the current user's unique ID, like an e-mail or username
+var channels = {}; // currently connected channels
+var activities = {}; // Local cache of activities and SIDs
 
 
 // helpers to update chat area with messages
-function append(html, clear) {
+function append(html, clear) { // TODO remove clear logic
     var $messages = $('#messages');
     if (clear) {
         $messages.html(html);
@@ -33,62 +36,74 @@ function chat(sid, user, msg) {
     var cleanUser = DOMPurify.sanitize(user);
     var cleanMessage = DOMPurify.sanitize(msg);
     var m = '<div class="chat"><span>' + cleanUser + ': </span>'
-        + cleanMessage + '</div>';
+    + cleanMessage + '</div>';
     if (sid === currentChannel.sid) { append(m); } // add to active box
     channelCache[sid] += m; // add to cache
 }
 
-// Make a given channel the currently selected channel
+// Make a given channel the currently selected channel TODO // remove
+/*
 function makeCurrent(channel) {
     currentChannel = channel;
     $('select').val(channel.sid);
     $('#messages').html(channelCache[channel.sid])
     $("#messages").scrollTop($("#messages")[0].scrollHeight);
 }
+*/
+
+// Make a given channel the currently selected channel
+function makeCurrent(channel) {
+    //remove highlight from previous active channel
+    if (currentChannel) {
+        $('#' + currentChannel.sid).removeClass('activeChannel');
+    }
+    // Set new currentChannel
+    currentChannel = channel;
+    // add highlight
+    $('#' + currentChannel.sid).addClass('activeChannel')
+    // Update messages panel
+    $('#messages').html(channelCache[channel.sid])
+    $("#messages").scrollTop($("#messages")[0].scrollHeight);
+}
 
 // Configure event callbacks on a messaging client
 function configureClient(messagingClient) {
+    // TODO setup previous state from last time agent logged in
 
-    // Listen for incoming channel invitations
-    messagingClient.on('channelInvited', function(channel) {
-        var confMessage = 'You have been invited to "' + channel.friendlyName
-            + '". Will you join?';
-        var joinChannel = confirm(confMessage);
-
-        // Bail if they decide not to join
-        if (!joinChannel) return;
-
-        // Otherwise, set up the channel
+    // listener for when the agent is added to a channel
+    messagingClient.on('channelJoined', function(channel) {
+        console.log('channelJoined', channel);
         configureChannel(channel);
-        makeCurrent(channel);
-        channel.join();
+        makeCurrent(channel); // TODO do I need to make current?
     });
 }
 
 // Configure UI and event callbacks for a channel
 function configureChannel(channel) {
     // Add to master list of channels
-    channels[channel.sid] = channel;
+    channels[channel.sid] = channel; // TODO remove this - do I need it?
 
-    // Add channel to dropdown
-    var option = '<option value="' + channel.sid + '">'
-        + channel.friendlyName + '</option>';
-    $('select').append(option);
+    // Add channel to sidebar
+    var div = '<div id="' + channel.sid + '" class="channel">'
+    + channel.friendlyName + '</div>';
+    $('#channels').append(div);
+
+    // setup a click listener
+    $('#' + channel.sid).on('click', function(e) {
+        console.log('you clicked', $(this).html());
+        console.log('channel', channel);
+        makeCurrent(channel);
+    });
 
     // initiate channel in local cache
     channelCache[channel.sid] = ""
 
-    // fetch chat history
-    // NOTE calling fetchMessages() is needed to force messageAdded events to
-    // start firing due to known bug
+    // populate chat history
     channel.fetchMessages(25).then(function (messages) {
         for (msg in messages) {
             chat(channel.sid, messages[msg].author, messages[msg].body)
         }
-    })
-
-    // TODO add buddy list for channels
-    channel.fetchMembers();
+    });
 
     // Set up listener for new messages on channel
     channel.on('messageAdded', function(message) {
@@ -102,12 +117,66 @@ function configureChannel(channel) {
     });
 }
 
+// helpers for taskrouter
+
+function updateActivity(worker) {
+    console.log("worker.activityName", worker.activityName);
+    console.log("worker.activitySid", worker.activitySid);
+    console.log("worker.available", worker.available);
+    $('#activity').val(worker.activitySid);
+    if (worker.available) {
+        $('#available').removeClass('red').addClass('green')
+    } else {
+        $('#available').removeClass('green').addClass('red')
+    }
+}
+
+function configureWorker(worker) {
+    // configure activities dropdown
+    worker.activities.fetch(
+        function(error, activityList) {
+            if(error) {
+                console.log(error); return;
+            } else {
+                var data = activityList.data;
+                for(i=0; i<data.length; i++) {
+                    activities[data[i].friendlyName] = data[i].sid; // TODO remove
+                    var option = '<option value="' + data[i].sid + '">'
+                    + data[i].friendlyName + '</option>';
+                    $('#activity').append(option);
+                }
+            }
+        }
+    );
+
+    // set dropdown to existing activity
+    worker.on("ready", function(worker) {
+        updateActivity(worker);
+    });
+
+    // Set up listener for activity updates
+    worker.on("activity.update", function(worker) {
+        updateActivity(worker);
+    });
+
+    // Set up listener for reservations
+    worker.on("reservation.created", function(reservation) {
+        var answer = confirm('New Reso - accept?');
+        if (answer) {
+            reservation.accept();
+        } else {
+            reservation.reject();
+            // TODO leave the channel
+        }
+    });
+}
+
 // Initialize application on window load
 $(function() {
     // Prompt for identity of the current user - not checked for uniqueness
     // in this demo. IRL you would probably use a logged in user's username
     // or e-mail address.
-    identity = prompt('Please enter a username:', 'jeffiel').trim();
+    identity = prompt('Please enter a username:', 'Bob').trim();
 
     // After identity entered, fetch capability token from server
     $.getJSON('/token', {
@@ -118,34 +187,15 @@ $(function() {
         messagingClient = new Twilio.IPMessaging.Client(data.token);
         info('Signed in as "' + identity + '".');
         configureClient(messagingClient);
-
-        // Create a default channel
-        messagingClient.createChannel({
-            friendlyName: identity + "'s Channel"
-        }).then(function(channel) {
-            // Join the channel
-            channel.join();
-
-            // add channel to currently connected channels and make it the
-            // current one
-            configureChannel(channel);
-            makeCurrent(channel);
-        });
     });
 
     // fetch TaskRouter capability token from server
     $.getJSON('/trtoken', {
-        worker_sid: 'WK93f03f04181b416eba8b398b3c0f8b25'
+        identity : identity
     }, function(data) {
-        // Initialize Twilio IP Messaging Client
+        // Initialize Twilio TaskRouter Client
         worker = new Twilio.TaskRouter.Worker(data.token);
-
-        // Set up listeners for activity updates
-        worker.on("activity.update", function(worker) {
-            console.log(worker.activityName)   // 'Reserved'
-            console.log(worker.activitySid)    // 'WAxxx'
-            console.log(worker.available)      // false
-        });
+        configureWorker(worker);
     });
 
     // Post new chat message
@@ -156,15 +206,15 @@ $(function() {
         currentChannel.sendMessage(msg);
     });
 
-    // Invite another user to the current channel
-    $('button').on('click', function(e) {
-        var newUser = prompt('Invite which user?', 'natasha').trim();
-        currentChannel.invite(newUser);
+    // TODO setup available button
+    $('#ready').on('click', function(e) {
+        console.log('you clicked', $(this).html());
     });
 
-    // Switch between active chats
-    $('select').on('change', function(e) {
+    // Change activity via dropdown
+    $('#activity').on('change', function(e) {
         var newValue = $(e.currentTarget).val();
-        makeCurrent(channels[newValue]);
+        console.log($(e.currentTarget).val());
+        worker.update("ActivitySid", newValue)
     });
 });

@@ -7,19 +7,17 @@ html, body {
     overflow:hidden;
 }
 
-#main {
-    background-color:#fff;
-    border-radius:3px;
-    width:500px;
-    height:500px;
-    margin:20px auto;
-    position:relative;
-}
-
 h1 {
     font-size:24px;
     margin:0;
-    padding:10px 0 0 10px;
+    padding:10px 0 0 16px;
+}
+
+h2 {
+    font-size: 17px;
+    margin: -1px;
+    padding: 6px;
+    border:1px solid #efefef;
 }
 
 button {
@@ -27,32 +25,48 @@ button {
     right:10px;
     top:10px;
     z-index:1;
+    color: white;
+    background-image: linear-gradient(to bottom,#33B74F 0,#268837 100%)
 }
 
-select {
-    position:absolute;
-    right:90px;
-    top:10px;
-    z-index:1;
+button.green {
+    background-image: linear-gradient(to bottom,#33B74F 0,#268837 100%)
+}
+
+button.red {
+    background-image: linear-gradient(to bottom,#B73333 0,#882626 100%);
 }
 
 select.form-control {
     width:200px;
 }
 
-.btn:focus {
-    outline:none;
+#main {
+    background-color:#fff;
+    border-radius:3px;
+    width:700px;
+    height:500px;
+    margin:20px auto;
+    position:relative;
 }
 
-form {
+#activity {
     position:absolute;
-    bottom:-5px;
-    right:10px;
-    left:10px;
+    right:90px;
+    top:10px;
+    z-index:1;
 }
 
-input {
-    width:100%;
+#channels {
+    position:absolute;
+    overflow-y:auto;
+    overflow-x:hidden;
+    top:50px;
+    left:10px;
+    bottom:55px;
+    border:1px solid #efefef;
+    width: 181px;
+    height: 442px;
 }
 
 #messages {
@@ -60,11 +74,40 @@ input {
     overflow-y:auto;
     overflow-x:hidden;
     top:50px;
-    left:10px;
     right:10px;
     bottom:55px;
     border:1px solid #efefef;
-    padding:3px;
+    padding:6px;
+    width: 500px;
+}
+
+#input-box {
+    position:absolute;
+    bottom:-5px;
+    right:10px;
+    margin-left: 10px;
+    width: 490px;
+}
+
+.channel {
+    font-size: 15px;
+    margin: -1px;
+    padding: 6px;
+    border:1px solid #efefef;
+}
+
+.activeChannel {
+    background-image:linear-gradient(to bottom,#337ab7 0,#265a88 100%);
+    color: white;
+}
+
+.channel:hover {
+    background-image: linear-gradient(to bottom,#33B74F 0,#268837 100%);
+    color: white;
+}
+
+.btn:focus {
+    outline:none;
 }
 
 .info {

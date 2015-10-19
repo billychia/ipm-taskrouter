@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SquareChat</title>
+    <title>Agent</title>
     <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
     <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap-theme.min.css">
     <link rel="stylesheet" href="main.css">
@@ -9,13 +9,16 @@
 <body>
     <div id="main">
         <h1>Agent</h1>
-        <button class="btn btn-primary">Invite...</button>
-        <select class="form-control"></select>
+        <button class="btn red" id="available">Status</button>
+        <select class="form-control" id="activity"></select>
         <div id="messages"></div>
-        <form>
+        <div id="channels">
+            <h2>Channels</h2>
+        </div>
+        <form id="input-box">
             <div class="form-group">
                 <input type="text" class="form-control"
-                    placeholder="Say anything...">
+                    placeholder="">
             </div>
         </form>
     </div>

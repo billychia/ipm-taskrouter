@@ -106,21 +106,24 @@ $(function() {
     // Prompt for identity of the current user - not checked for uniqueness
     // in this demo. IRL you would probably use a logged in user's username
     // or e-mail address.
-    identity = prompt('Please enter a your name:', 'Customer A').trim();
+    identity = prompt('Please enter a your name:', 'John').trim();
 
     // After identity entered, fetch capability token from server
     $.getJSON('/token', {
         identity: identity,
         device: 'browser' // Ideally, this would be a unique device ID
     }, function(data) {
+        console.log('initializing client');
         // Initialize Twilio IP Messaging Client
         messagingClient = new Twilio.IPMessaging.Client(data.token);
         info('Signed in as "' + identity + '".');
         configureClient(messagingClient);
 
         // Create a default channel
+        console.log('creating a channel');
         messagingClient.createChannel({
-            friendlyName: identity + "'s Channel"
+            friendlyName: identity + "'s Channel",
+            attributes: { service_type : "sales" }
         }).then(function(channel) {
             // Join the channel
             channel.join();

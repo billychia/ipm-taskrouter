@@ -5,14 +5,6 @@ var twilio = require('twilio');
 var bodyParser  = require('body-parser');
 var httpRequest = require('request');
 
-// Create Express app
-var app = express();
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({
-  extended: true
-}));
-
 // Configuration for Twilio account and messaging service instance
 var accountSid = process.env.TWILIO_ACCOUNT_SID;
 var authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -25,15 +17,40 @@ var serviceSid = process.env.TWILIO_IP_SERVICE_SID;
 var workspaceSid = process.env.TWILIO_WORKSPACE_SID;
 var workflowSid = process.env.TWILIO_WORKFLOW_SID;
 
+// in memery cache of user worker SIDs
+// TODO move to a database
+var taskRouterCache = {};
+
 // create TaskRouter Client
 var client = new twilio.TaskRouterClient(accountSid, authToken);
 
-// poor man's db
-var db = { 'Alice' : 'WK93f03f04181b416eba8b398b3c0f8b25',
-           'Bob' : 'WK3baf910df53787b8a3647c2f5c066db4'
-} // mapping of IP Messaging endpointId to TaskRouter workerSid
+// Create Express app
+var app = express();
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({
+  extended: true
+}));
 
-var channelSid;
+function addToTaskRouterCache(workerSid, friendlyName) {
+    taskRouterCache[workerSid] = taskRouterCache[workerSid] || {};
+    taskRouterCache[workerSid] = friendlyName;
+}
+
+// Get workerSids at runtime & add to cache
+// TODO add a listenr to update with newly created workers
+client.workspace.workers.get(null,
+    function(err, data) {
+        if(!err) {
+            data.workers.forEach(function(worker) {
+                var friendlyName = worker.friendly_name;
+                var workerSid = worker.sid;
+                addToTaskRouterCache(workerSid, friendlyName);
+                console.log('added', friendlyName, workerSid, 'to cache');
+            })
+        }
+    }
+);
 
 // Generate an IP Messaging token
 app.get('/token', function(request, response) {
@@ -70,88 +87,143 @@ app.get('/token', function(request, response) {
 
 // Generate a TaskRouter token
 app.get('/trtoken', function(request, response) {
-    // Get the Worker SID
-    var workerSid = request.query.worker_sid;
+    // Get the identity
+    var identity = request.query.identity;
 
-    // Generate a TaskRouter Capability Token
-    var generator = new twilio.TaskRouterWorkerCapability(accountSid,
-                                                          authToken,
-                                                          workspaceSid,
-                                                          workerSid);
-    // set worker permissions
-    generator.allowActivityUpdates();
-    generator.allowReservationUpdates();
-
-    // generate string token (JWT) we send to the client
-    var tokenExpiresAfterSeconds = 60 * 60 * 12 * 1000; // 12 hours
-    var token = generator.generate(tokenExpiresAfterSeconds);
-
-    // Send token to client in a JSON response
-    response.send({
-        token: token
+    // get FriendlyName from local cache
+    Object.keys(taskRouterCache).forEach(function(workerSid) {
+        if (identity == taskRouterCache[workerSid]) {
+            sendToken(workerSid);
+        }
     });
+
+    //console.log("taskRouterCache", taskRouterCache);
+
+    // Get the workerSid - kinda hacky, probably a local cache is better idea
+    // client.workspace.workers.get({ "FriendlyName" : identity},
+    //     function(err, data) {
+    //         if(!err) {
+    //             data.workers.forEach(function(worker) {
+    //                 sendToken(worker.sid);
+    //             })
+    //         }
+    //     }
+    // );
+
+    // send token after we recieve workerSid
+    function sendToken(workerSid) {
+        // Generate a TaskRouter Capability Token
+        var generator = new twilio.TaskRouterWorkerCapability(
+            accountSid, authToken, workspaceSid, workerSid);
+
+        // set worker permissions
+        generator.allowActivityUpdates();
+        generator.allowReservationUpdates();
+
+        // generate string token (JWT) we send to the client
+        var tokenExpiresAfterSeconds = 60 * 60 * 12 * 1000; // 12 hours
+        var token = generator.generate(tokenExpiresAfterSeconds);
+
+        // Send token to client in a JSON response
+        response.send({
+            token: token
+        });
+    }
 });
 
+// process IP Messaging webhooks
 app.post('/hook', function(request, response) {
   var trigger = request.query.trigger;
 
+  // fire when a new channel is created
   if (trigger == 'onChannelAdd') {
     console.log('onChannelAdd fired');
-    console.log('TRSID: ', db['Alice']);
-    channelSid = request.body.ChannelSid;
-    console.log('channelSid', channelSid);
-    console.log('request.body', request.body);
-
-    createTask(channelSid);
+    var channelSid = request.body.ChannelSid;
+    var serviceType = JSON.parse(request.body.Attributes).service_type
+    createTask(channelSid, serviceType);
   }
 
   response.sendStatus(200);
-
-  addToChannel(channelSid);
 });
 
-function createTask(channelSid) {
-  console.log('Creating TAsk');
+// Helper Function to create a TaskRouter Task
+function createTask(channelSid, serviceType) {
+  console.log('Creating Task');
+  var attributes = JSON.stringify({
+      service_request: serviceType,
+      channelSid: channelSid
+   });
   client.workspace.tasks.create({
         workflowSid: workflowSid,
-        attributes: '{"service_request":"support"}'
+        attributes: attributes
     }, function(err, task) {
       if (err) {
-        response.sendStatus(500).json(err);
+        console.log("error creating task", err);
       } else {
         console.log("task_sid: ", task.sid);
         console.log("assignment_status: ", task.assignment_status);
-        response.sendStatus(200);
       }
     });
 }
 
-function addToChannel(channelSid) {
-  console.log('adding to channel: ', channelSid)
+// Helper Function to add the Agent Member to the Customer created channel
+function addToChannel(identity, channelSid) {
+  console.log('adding ' + identity + ' to channel: ' + channelSid)
   // on Reservaction accept add agent to the channel
   var baseUrl = 'https://' + accountSid + ':' + authToken +
     '@ip-messaging.twilio.com/v1/'
   httpRequest.post({
     url: baseUrl + 'Services/' + serviceSid + '/Channels/' + channelSid + '/Members',
-    formData: { Identity: 'Alice' }
+    formData: { Identity: identity }
   }, function (error, response, body) {
       if (error) {
-        return console.error('upload failed:', error);
+        return console.error('ChannelAdd failed:', error);
       }
-      console.log('Upload successful!  Server responded with:', body);
+      console.log('ChannelAdd successful!  Server responded with:', body);
      }
   );
 }
 
-
 // TaskRouter Callback URLs
 app.all('/assignment_callback', function(request, response) {
-  console.log('we got a body: ', request.body);
+  console.log('POST to /assignment_callback', request.body);
+
+  // add channel
+  var channelSid = JSON.parse(request.body.TaskAttributes).channelSid;
+
+  var identity = taskRouterCache[request.body.WorkerSid];
+
+  // add the worker to the channel
+  console.log('adding ' + identity + ' to channel: ' + channelSid );
+  addToChannel(identity, channelSid);
 
   // Respond to assignment callbacks with empty 200 response
-  response.sendStatus(200);
+  response.sendStatus(200)//.json('{"instruction": "accept"})');
 });
 
+// Events callback on workSpace - I don't think this is the way to do it.
+app.all('/taskrouter_events', function(request, response) {
+    console.log('POST to /taskrouter_events', request.body);
+
+    var eventType = request.body.EventType;
+    switch (eventType) {
+        case 'reservation.accepted':
+            console.log('reservation.accepted calling addToChannel');
+            var channelSid = JSON.parse(request.body.TaskAttributes).channelSid;
+            addToChannel(channelSid);
+        break;
+    }
+});
+
+
+//
+//
+// START Not Used but helpful for debugging
+//
+//
+
+
+// route to test task creation
 app.all('/create_task', function(request, response) {
   // Creating a task
   client.workspace.tasks.create({
@@ -186,6 +258,12 @@ app.all('/accept_reservation', function(request, response) {
        }
     });
 });
+
+//
+//
+// END Not Used but helpful for debugging
+//
+//
 
 // Start and mount express app
 var port = process.env.PORT || 3000;
