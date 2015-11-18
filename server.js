@@ -185,7 +185,12 @@ app.all('/assignment_callback', function(request, response) {
   addToChannel(identity, channelSid);
 
   // Respond to assignment callbacks with empty 200 response
-  response.sendStatus(200)
+  setTimeout(function() {
+      console.log("responding 200OK now");
+      response.sendStatus(200);
+  }, 2000);
+
+
 });
 
 // Events callback on workSpace - I don't think this is the way to do it.

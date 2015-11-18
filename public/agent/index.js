@@ -5,7 +5,7 @@ var channelCache = {} // Local cache of processed messages for each channel
 var worker; // handle for Twilio.TaskRouter.Worker instance
 
 // helpers to update chat area with messages
-function append(html) { 
+function append(html) {
     var $messages = $('#messages');
     $messages.append(html);
     $messages.animate({
